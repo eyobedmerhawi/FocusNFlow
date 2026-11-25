@@ -1,0 +1,93 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read, delete: if isOwner(userId);
+
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+          'displayName', 'email', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'displayName', 'email', 'createdAt'
+        ])
+        && request.resource.data.displayName is string
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly(['displayName'])
+        && request.resource.data.displayName is string;
+    }
+
+    match /tasks/{taskId} {
+      allow read, delete: if signedIn()
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'userId', 'title', 'description', 'dueAt',
+          'completed', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'userId', 'title', 'completed', 'createdAt'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.completed is bool
+        && request.resource.data.createdAt == request.time
+        && (
+          !request.resource.data.keys().hasAny(['description'])
+          || request.resource.data.description is string
+        )
+        && (
+          !request.resource.data.keys().hasAny(['dueAt'])
+          || request.resource.data.dueAt is timestamp
+        );
+
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'title', 'description', 'dueAt', 'completed'
+          ])
+        && request.resource.data.title is string
+        && request.resource.data.completed is bool
+        && (
+          !request.resource.data.keys().hasAny(['description'])
+          || request.resource.data.description is string
+        )
+        && (
+          !request.resource.data.keys().hasAny(['dueAt'])
+          || request.resource.data.dueAt is timestamp
+        );
+    }
+
+    match /study_rooms/{roomId} {
+      allow read, write: if false;
+    }
+
+    match /study_groups/{groupId} {
+      allow read, write: if false;
+    }
+
+    match /study_sessions/{sessionId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
